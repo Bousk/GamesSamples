@@ -30,3 +30,17 @@
 *.exe
 *.out
 *.app
+*.pdb
+*.tlog
+*.sln
+*.suo
+*.vcxproj
+*.vcxproj.filters
+*.user
+*.idb
+*.log
+*.db
+*.db-shm
+*.db-wal
+*.opendb
+TicTacToe/builds/**
