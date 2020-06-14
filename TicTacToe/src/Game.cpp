@@ -1,16 +1,4 @@
 #include <Game.hpp>
-#include <iostream>
-
-std::ostream& operator<<(std::ostream& os, TicTacToe::Case symbol)
-{
-	switch (symbol)
-	{
-		case TicTacToe::Case::Empty: os << ' '; break;
-		case TicTacToe::Case::X: os << 'X'; break;
-		case TicTacToe::Case::O: os << 'O'; break;
-	}
-	return os;
-}
 
 namespace TicTacToe
 {
@@ -60,28 +48,5 @@ namespace TicTacToe
 			}
 		}
 		return true;
-	}
-	void Grid::display() const
-	{
-		for (unsigned x = 0; x < 3; ++x)
-		{
-			for (unsigned y = 0; y < 3; ++y)
-			{
-				std::cout << mGrid[x][y];
-				if (y != 2)
-					std::cout << '|';
-			}
-			std::cout << std::endl;
-			if (x != 2)
-			{
-				for (unsigned y = 0; y < 3; ++y)
-				{
-					std::cout << '-';
-					if (y != 2)
-						std::cout << '.';
-				}
-				std::cout << std::endl;
-			}
-		}
 	}
 }

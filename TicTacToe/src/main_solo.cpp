@@ -4,14 +4,7 @@ int main_solo()
 {
     SDL_Init(SDL_INIT_VIDEO);
 
-    SDL_Window* window = SDL_CreateWindow(
-        "TicTacToe",                  // window title
-        SDL_WINDOWPOS_CENTERED,           // initial x position
-        SDL_WINDOWPOS_CENTERED,           // initial y position
-        WIN_W,                               // width, in pixels
-        WIN_H,                               // height, in pixels
-        SDL_WINDOW_OPENGL                  // flags - see below
-    );
+    SDL_Window* window = SDL_CreateWindow("TicTacToe", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIN_W, WIN_H, SDL_WINDOW_OPENGL);
     const std::string baseTitle = "TicTacToe";
     auto updateWindowTitle = [&](const char* suffix)
     {
@@ -57,7 +50,7 @@ int main_solo()
             }
         }
 
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
         SDL_RenderClear(renderer);
         // Draw cases
         for (int x = 0; x < 3; ++x)
@@ -70,7 +63,7 @@ int main_solo()
             }
         }
         // Draw grid lines
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
         // Horizontal
         SDL_RenderDrawLine(renderer, 0, CASE_H, WIN_W, CASE_H);
         SDL_RenderDrawLine(renderer, 0, CASE_H * 2, WIN_W, CASE_H * 2);

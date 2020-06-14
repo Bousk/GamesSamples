@@ -45,14 +45,7 @@ int main_p2p(const bool isHost)
 
     SDL_Init(SDL_INIT_VIDEO);
 
-    SDL_Window* window = SDL_CreateWindow(
-        "TicTacToe",                  // window title
-        SDL_WINDOWPOS_CENTERED,           // initial x position
-        SDL_WINDOWPOS_CENTERED,           // initial y position
-        WIN_W,                               // width, in pixels
-        WIN_H,                               // height, in pixels
-        SDL_WINDOW_OPENGL                  // flags - see below
-    );
+    SDL_Window* window = SDL_CreateWindow("TicTacToe", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIN_W, WIN_H, SDL_WINDOW_OPENGL);
 
     std::string baseTitle = "TicTacToe - ";
     baseTitle += isHost ? "Host" : "Client";
@@ -151,8 +144,17 @@ int main_p2p(const bool isHost)
             {
                 if (state == State::WaitingConnection)
                 {
-                    // Host plays first
-                    setState(isHost ? State::MyTurn : State::OpponentTurn);
+                    const Bousk::Network::Messages::Connection* connectionMsg = msg->as<Bousk::Network::Messages::Connection>();
+                    if (connectionMsg->result == Bousk::Network::Messages::Connection::Result::Success)
+                    {
+                        // Host plays first
+                        setState(isHost ? State::MyTurn : State::OpponentTurn);
+                    }
+                    else if (isHost)
+                    {
+                        // Go back to waiting an opponent
+                        setState(State::WaitingOpponent);
+                    }
                 }
             }
             else if (msg->is<Bousk::Network::Messages::UserData>())
@@ -178,8 +180,10 @@ int main_p2p(const bool isHost)
                 updateWindowTitle("Disconnected");
             }
         }
+        // Send network data
+        client.processSend();
 
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
         SDL_RenderClear(renderer);
         // Draw cases
         for (int x = 0; x < 3; ++x)
@@ -192,7 +196,7 @@ int main_p2p(const bool isHost)
             }
         }
         // Draw grid lines
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
         // Horizontal
         SDL_RenderDrawLine(renderer, 0, CASE_H, WIN_W, CASE_H);
         SDL_RenderDrawLine(renderer, 0, CASE_H * 2, WIN_W, CASE_H * 2);
@@ -212,8 +216,6 @@ int main_p2p(const bool isHost)
         }
 
         SDL_RenderPresent(renderer);
-        // Send network data
-        client.processSend();
         SDL_Delay(1);
     }
 

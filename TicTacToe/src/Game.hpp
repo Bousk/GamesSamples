@@ -23,9 +23,6 @@ namespace TicTacToe
 		// Return winner, if any, Case::Empty otherwise
 		Case winner() const { return mWinner; }
 
-		// Display the board in console
-		void display() const;
-
 		const std::array<std::array<Case, 3>, 3>& grid() const { return mGrid; }
 
 	private:

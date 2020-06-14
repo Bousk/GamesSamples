@@ -14,7 +14,7 @@ inline SDL_Texture* LoadTexture(const char* filepath, SDL_Renderer* renderer)
 {
     if (SDL_Surface* surface = SDL_LoadBMP(filepath))
     {
-        //SDL_SetColorKey(surface, SDL_TRUE, SDL_MapRGB(surface->format, 255, 174, 201));
+        SDL_SetColorKey(surface, SDL_TRUE, SDL_MapRGB(surface->format, 255, 174, 201));
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         SDL_FreeSurface(surface);
         return texture;

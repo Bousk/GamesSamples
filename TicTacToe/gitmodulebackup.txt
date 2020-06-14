@@ -1,0 +1,3 @@
+[submodule "TicTacToe/TicTacToe/Libs/Net"]
+	path = TicTacToe/TicTacToe/Libs/Net
+	url = https://github.com/Bousk/Net
