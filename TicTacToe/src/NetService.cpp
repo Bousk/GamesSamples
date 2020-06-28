@@ -28,6 +28,7 @@ bool NetService::init(const Parameters& parameters)
 		// If we're not host, initialize connection right away
 		mUdpClient.connect(parameters.hostAddress);
 	}
+    mContext = parameters;
     mState = State::Initialized;
     FORWARD_TO_LISTENERS(onServiceInitialized);
 	return true;
