@@ -3,7 +3,7 @@
 #include <string>
 
 extern int main_p2p(bool isHost);
-extern int main_tcp(bool isServer);
+extern int main_merged(bool isNetworked, bool isHost);
 extern int main_solo();
 
 enum class MainType
@@ -35,11 +35,12 @@ int SDL_main(int argc, char* argv[])
             break;
         }
     }
-    switch (type)
-    {
-        case MainType::Solo: return main_solo();
-        case MainType::P2P_Host: return main_p2p(true);
-        case MainType::P2P_Client: return main_p2p(false);
-        case MainType::Unknown: return -1;
-    }
+    return main_merged(type != MainType::Unknown && type != MainType::Solo, type == MainType::P2P_Host);
+    //switch (type)
+    //{
+    //    case MainType::Solo: return main_solo();
+    //    case MainType::P2P_Host: return main_p2p(true);
+    //    case MainType::P2P_Client: return main_p2p(false);
+    //    case MainType::Unknown: return -1;
+    //}
 }

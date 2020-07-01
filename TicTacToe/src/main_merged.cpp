@@ -101,17 +101,31 @@ int main_merged(const bool isNetworked, const bool isHost = false)
             case State::Finished: updateWindowTitle("Finished"); break;
         }
     };
-    setState(isHost ? State::WaitingOpponent : State::WaitingConnection);
+    if (netService->isNetworked())
+        setState(netService->isHost() ? State::WaitingOpponent : State::WaitingConnection);
+    else
+        setState(State::MyTurn);
 
     // Load textures to display : None, X & O
     std::array<SDL_Texture*, 3> plays{ LoadTexture("Empty.bmp", renderer), LoadTexture("X.bmp", renderer), LoadTexture("O.bmp", renderer) };
 
     TicTacToe::Grid game;
-    // Host plays X, guest plays O
-    const TicTacToe::Case localPlayerSymbol = isHost ? TicTacToe::Case::X : TicTacToe::Case::O;
-    // Save my opponent symbol too
-    const TicTacToe::Case opponentSymbol = (localPlayerSymbol == TicTacToe::Case::X) ? TicTacToe::Case::O : TicTacToe::Case::X;
-    // Will be used to store opponent address
+    // Host plays X, guest plays O, host plays first
+    const std::array<TicTacToe::Case, 2> players{ TicTacToe::Case::X, TicTacToe::Case::O };
+    uint8_t currentPlayingPlayer = 0;
+    auto playCurrentTurnLocally = [&](unsigned int x, unsigned int y)
+    {
+        const TicTacToe::Case currentPlayerSymbol = players[currentPlayingPlayer];
+        if (game.play(x, y, currentPlayerSymbol))
+        {
+            // If the move is successful, change current player to next one
+            currentPlayingPlayer = (currentPlayingPlayer + 1) % 2;
+            setState(state == State::OpponentTurn ? State::MyTurn : State::OpponentTurn);
+            return true;
+        }
+        return false;
+    };
+
     Bousk::Network::Address opponent;
 
     NetListener netListener;
@@ -153,12 +167,11 @@ int main_merged(const bool isNetworked, const bool isHost = false)
             assert(false);
         }
         assert(state == State::OpponentTurn);
-        if (!game.play(play.x, play.y, opponentSymbol))
+        if (!playCurrentTurnLocally(play.x, play.y))
         {
             std::cout << "Critical error : failed to play opponent move" << std::endl;
             assert(false);
         }
-        setState(State::MyTurn);
     };
     netListener.mOnDisconnection = [&](const Bousk::Network::Messages::Disconnection& msg)
     {
@@ -173,7 +186,7 @@ int main_merged(const bool isNetworked, const bool isHost = false)
             {
                 break;
             }
-            if (e.type == SDL_MOUSEBUTTONUP && state == State::MyTurn)
+            if (e.type == SDL_MOUSEBUTTONUP && (state == State::MyTurn || !netService->isNetworked()))
             {
                 if (e.button.button == SDL_BUTTON_LEFT)
                 {
@@ -183,19 +196,21 @@ int main_merged(const bool isNetworked, const bool isHost = false)
                         // Click released on the window : play ?
                         const unsigned int caseX = static_cast<unsigned int>(e.button.x / CASE_W);
                         const unsigned int caseY = static_cast<unsigned int>(e.button.y / CASE_H);
-                        if (game.play(caseX, caseY, localPlayerSymbol))
+                        if (playCurrentTurnLocally(caseX, caseY))
                         {
-                            TicTacToe::Net::Play msg;
-                            msg.x = caseX;
-                            msg.y = caseY;
-                            Bousk::Serialization::Serializer serializer;
-                            if (!msg.write(serializer))
+                            if (netService->isNetworked())
                             {
-                                std::cout << "Critical error : failed to serialize play packet" << std::endl;
-                                assert(false);
+                                TicTacToe::Net::Play msg;
+                                msg.x = caseX;
+                                msg.y = caseY;
+                                Bousk::Serialization::Serializer serializer;
+                                if (!msg.write(serializer))
+                                {
+                                    std::cout << "Critical error : failed to serialize play packet" << std::endl;
+                                    assert(false);
+                                }
+                                netService->sendTo(opponent, serializer.buffer(), serializer.bufferSize());
                             }
-                            netService->sendTo(opponent, serializer.buffer(), serializer.bufferSize());
-                            setState(State::OpponentTurn);
                         }
                     }
                 }
@@ -232,12 +247,19 @@ int main_merged(const bool isNetworked, const bool isHost = false)
         if (game.isFinished())
         {
             const TicTacToe::Case winner = game.winner();
-            if (winner == localPlayerSymbol)
-                updateWindowTitle("You win");
-            else if (winner == opponentSymbol)
-                updateWindowTitle("You loose");
-            else
+            if (winner != players[0] && winner != players[1])
                 updateWindowTitle("Draw");
+            else
+            {
+                if (netService->isNetworked())
+                {
+                    updateWindowTitle((winner == players[0]) == netService->isHost() ? "You win" : "You loose");
+                }
+                else
+                {
+                    updateWindowTitle(winner == players[0] ? "Player 1 wins" : "Player 2 wins");
+                }
+            }
         }
 
         SDL_RenderPresent(renderer);
