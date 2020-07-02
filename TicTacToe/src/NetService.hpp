@@ -45,6 +45,8 @@ public:
 	inline bool isNetworked() const { return mContext.networked; }
 	inline bool isHost() const { return mContext.host; }
 
+	//inline Bousk::uint16 port() const { return mUdpClient.}
+
 	void sendTo(const Bousk::Network::Address& target, const Bousk::uint8* data, const size_t datasize);
 
 private:
