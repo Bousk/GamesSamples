@@ -31,6 +31,7 @@ public:
 		virtual ~IListener() = default;
 	};
 public:
+	NetService();
 	bool init(const Parameters& parameters);
 	void release();
 
