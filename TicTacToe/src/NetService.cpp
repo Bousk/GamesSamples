@@ -4,34 +4,37 @@
 #include <UDP/Protocols/ReliableOrdered.hpp>
 
 #define FORWARD_TO_LISTENERS(ListenerMethod, ...)	\
-	for (IListener* listener : mListeners)			\
-	{												\
-		listener->ListenerMethod(__VA_ARGS__);		\
-	}
+    for (IListener* listener : mListeners)			\
+    {												\
+	    listener->ListenerMethod(__VA_ARGS__);		\
+    }
 
+NetService::NetService()
+{
+    mUdpClient.registerChannel<Bousk::Network::UDP::Protocols::ReliableOrdered>();
+}
 bool NetService::init(const Parameters& parameters)
 {
-	if (isInitialized())
-		return false;
-	if (!parameters.networked)
-		return true;
-
-    if (!Bousk::Network::Start())
-    {
+    if (isInitialized())
         return false;
+    if (parameters.networked)
+    {
+        if (!Bousk::Network::Start())
+        {
+            return false;
+        }
+        if (!mUdpClient.init(parameters.localPort))
+            return false;
+        if (!parameters.host)
+        {
+            // If we're not host, initialize connection right away
+            mUdpClient.connect(parameters.hostAddress);
+        }
     }
-    mUdpClient.registerChannel<Bousk::Network::UDP::Protocols::ReliableOrdered>();
-	if (!mUdpClient.init(parameters.localPort))
-		return false;
-	if (!parameters.host)
-	{
-		// If we're not host, initialize connection right away
-		mUdpClient.connect(parameters.hostAddress);
-	}
     mContext = parameters;
     mState = State::Initialized;
     FORWARD_TO_LISTENERS(onServiceInitialized);
-	return true;
+    return true;
 }
 void NetService::release()
 {

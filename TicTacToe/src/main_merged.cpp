@@ -169,7 +169,7 @@ int main_merged(const bool isNetworked, const bool isHost = false)
         assert(state == State::OpponentTurn);
         if (!playCurrentTurnLocally(play.x, play.y))
         {
-            std::cout << "Critical error : failed to play opponent move" << std::endl;
+            std::cout << "Critical error : failed to play move" << std::endl;
             assert(false);
         }
     };
