@@ -2,7 +2,6 @@
 
 #include <Errors.hpp>
 #include <Messages.hpp>
-#include <Sockets.hpp>
 #include <Serialization/Deserializer.hpp>
 #include <Serialization/Serializer.hpp>
 #include <UDP/UDPClient.hpp>
@@ -28,7 +27,7 @@ public:
 private:
     bool onIncomingConnection(const Bousk::Network::Messages::IncomingConnection& incomingConnection) override
     {
-        return mOnIncomingConnection && mOnIncomingConnection(incomingConnection);
+        return !mOnIncomingConnection || mOnIncomingConnection(incomingConnection);
     }
 
     void onConnectionResult(const Bousk::Network::Messages::Connection& connection) override
@@ -63,7 +62,7 @@ int main_merged(const bool isNetworked, const bool isHost = false)
             netServiceParameters.hostAddress = Bousk::Network::Address::Loopback(Bousk::Network::Address::Type::IPv4, HostPort);
         if (!netService->init(netServiceParameters))
         {
-            std::cout << "NetService initialisation error : " << Bousk::Network::Errors::Get();
+            std::cout << "NetService initialization error : " << Bousk::Network::Errors::Get();
             return -1;
         }
     }
@@ -75,7 +74,18 @@ int main_merged(const bool isNetworked, const bool isHost = false)
     constexpr std::string_view baseTitle = "TicTacToe - ";
     auto updateWindowTitle = [&](const char* suffix)
     {
-        std::string title = std::string(baseTitle) + (isHost ? "Host" : "Client") + " - " + suffix;
+        std::string title = std::string(baseTitle);
+        if (netService->isNetworked())
+        {
+            if (netService->isHost())
+                title += "Host";
+            else
+                title += "Client";
+        }
+        else
+            title += "Offline";
+        title += " - ";
+        title += suffix;
         SDL_SetWindowTitle(window, title.c_str());
     };
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
@@ -96,8 +106,8 @@ int main_merged(const bool isNetworked, const bool isHost = false)
         {
             case State::WaitingOpponent: updateWindowTitle("Waiting opponent"); break;
             case State::WaitingConnection: updateWindowTitle("Waiting connection"); break;
-            case State::MyTurn: updateWindowTitle("My turn"); break;
-            case State::OpponentTurn: updateWindowTitle("Opponent turn"); break;
+            case State::MyTurn: updateWindowTitle(netService->isNetworked() ? "My turn" : "Player 1 turn"); break;
+            case State::OpponentTurn: updateWindowTitle(netService->isNetworked() ? "Opponent turn" : "Player 2 turn"); break;
             case State::Finished: updateWindowTitle("Finished"); break;
         }
     };
