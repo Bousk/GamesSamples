@@ -74,7 +74,7 @@ int main_merged(const bool isNetworked, const bool isHost = false)
     constexpr std::string_view baseTitle = "TicTacToe - ";
     auto updateWindowTitle = [&](const char* suffix)
     {
-        std::string title = std::string(baseTitle);
+        std::string title(baseTitle);
         if (netService->isNetworked())
         {
             if (netService->isHost())
