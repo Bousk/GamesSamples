@@ -4,7 +4,6 @@
 #include <Messages.hpp>
 #include <Serialization/Deserializer.hpp>
 #include <Serialization/Serializer.hpp>
-#include <UDP/UDPClient.hpp>
 
 #include <NetService.hpp>
 
@@ -97,7 +96,6 @@ int main_merged(const bool isNetworked, const bool isHost = false)
         OpponentTurn,
         Finished,
     };
-    // Host wait for opponent to connect while guest connect to host right away
     State state;
     auto setState = [&](State newState)
     {
