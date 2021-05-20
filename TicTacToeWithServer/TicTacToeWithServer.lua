@@ -1,13 +1,13 @@
-function CreateTicTacToe(baseFolder, outputFolder)
-	print("TicTacToe : " .. baseFolder)
-	project "TicTacToe"
+function CreateTicTacToeWithServer(baseFolder, outputFolder)
+	print("TicTacToeWithServer : " .. baseFolder)
+	project "TicTacToeWithServer"
 		kind "WindowedApp"
 		language "C++"
 		cppdialect "c++17"
 		-- architecture "x64"
 		targetdir(outputFolder)
 		filter {}
-		targetname "TicTacToe"
+		targetname "TicTacToeWithServer"
 		
 		files {
 			baseFolder .. "src/**"

@@ -1,11 +1,11 @@
 require "Libs/Net/NetworkLib/NetworkLib"
-require "TicTacToe"
+require "TicTacToeWithServer"
 
-workspace "TicTacToe"
+workspace "TicTacToeWithServer"
 	configurations { "Debug", "Release" }
 	architecture "x64"
 	cppdialect "C++17"
 	location("./tmp/builds/projects/" .. _ACTION)
 		
 CreateNetworkLib("Libs/Net/NetworkLib/", "./tmp/builds/files/" .. _ACTION .. "/%{cfg.buildcfg}")
-CreateTicTacToe("./", "./builds/%{cfg.buildcfg}")
+CreateTicTacToeWithServer("./", "./builds/%{cfg.buildcfg}")
