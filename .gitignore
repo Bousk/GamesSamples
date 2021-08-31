@@ -45,3 +45,4 @@
 *.opendb
 TicTacToe/builds/**
 TicTacToe/tmp/**
+*.ipch
