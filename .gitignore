@@ -43,6 +43,6 @@
 *.db-shm
 *.db-wal
 *.opendb
-TicTacToe/builds/**
-TicTacToe/tmp/**
+*/builds/**
+*/tmp/**
 *.ipch
