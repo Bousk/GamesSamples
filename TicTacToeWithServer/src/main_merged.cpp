@@ -5,9 +5,13 @@
 #include <Serialization/Deserializer.hpp>
 #include <Serialization/Serializer.hpp>
 
+#include <Net.hpp>
 #include <NetService.hpp>
 
+#include <algorithm>
+#include <array>
 #include <iostream>
+#include <random>
 
 static constexpr Bousk::uint16 HostPort = 8888;
 
@@ -16,12 +20,12 @@ class NetListener : public NetService::IListener
     using OnIncomingConnectionCallback = std::function<bool(const Bousk::Network::Messages::IncomingConnection&)>;
     using OnConnectionCallback = std::function<void(const Bousk::Network::Messages::Connection&)>;
     using OnDisconnectionCallback = std::function<void(const Bousk::Network::Messages::Disconnection&)>;
-    using OnDataReceivedCallback = std::function<void(const Bousk::Network::Messages::UserData&)>;
+    using OnMessageReceivedCallback = std::function<void(const TicTacToe::Net::Message&)>;
 public:
     OnIncomingConnectionCallback mOnIncomingConnection;
     OnConnectionCallback mOnConnectionResult;
     OnDisconnectionCallback mOnDisconnection;
-    OnDataReceivedCallback mOnDataReceived;
+    OnMessageReceivedCallback mOnMessageReceived;
 
 private:
     bool onIncomingConnection(const Bousk::Network::Messages::IncomingConnection& incomingConnection) override
@@ -41,24 +45,25 @@ private:
             mOnDisconnection(disconnection);
     }
 
-    void onDataReceived(const Bousk::Network::Messages::UserData& userdata) override
+    void onMessageReceived(const Bousk::Network::Messages::UserData& userdata) override
     {
-        if (mOnDataReceived)
-            mOnDataReceived(userdata);
+        if (mOnMessageReceived)
+        {
+            if (auto msg = TicTacToe::Net::Message::Deserialize(userdata.data.data(), userdata.data.size()))
+                mOnMessageReceived(*msg);
+        }
     }
 };
 
-int main_merged(const bool isNetworked, const bool isHost = false)
+int main_game(const NetService::NetworkType networkType)
 {
     // Use a heap allocation to prevent stack size warning since NetService is quite big
     std::unique_ptr<NetService> netService = std::make_unique<NetService>();
     {
         NetService::Parameters netServiceParameters;
-        netServiceParameters.networked = isNetworked;
-        netServiceParameters.host = isNetworked && isHost;
-        netServiceParameters.localPort = isHost ? HostPort : 0;
-        if (!isHost)
-            netServiceParameters.hostAddress = Bousk::Network::Address::Loopback(Bousk::Network::Address::Type::IPv4, HostPort);
+        netServiceParameters.networkType = networkType;
+        netServiceParameters.localPort = netServiceParameters.isHost() ? HostPort : 0;
+        netServiceParameters.hostAddress = Bousk::Network::Address::Loopback(Bousk::Network::Address::Type::IPv4, HostPort);
         if (!netService->init(netServiceParameters))
         {
             std::cout << "NetService initialization error : " << Bousk::Network::Errors::Get();
@@ -76,7 +81,9 @@ int main_merged(const bool isNetworked, const bool isHost = false)
         std::string title(baseTitle);
         if (netService->isNetworked())
         {
-            if (netService->isHost())
+            if (netService->isDedicatedServer())
+                title += "Server";
+            else if (netService->isHost())
                 title += "Host";
             else
                 title += "Client";
@@ -92,93 +99,239 @@ int main_merged(const bool isNetworked, const bool isHost = false)
     enum class State {
         WaitingOpponent,
         WaitingConnection,
-        MyTurn,
-        OpponentTurn,
+        WaitingGameStart,
+        Playing,
+        PlayRequested,
         Finished,
     };
     State state;
+    TicTacToe::Game game;
+    TicTacToe::Case localPlayerSymbol = TicTacToe::Case::Empty;
+    // Server specific data : symbol & ip address of each player
+    struct {
+        struct Player {
+            TicTacToe::Case symbol{ TicTacToe::Case::Empty };
+            Bousk::Network::Address address;
+        };
+        std::vector<Player> players;
+    } serverData;
+    // If we're host but not dedicated server, we locally play
+    if (netService->isHost() && !netService->isDedicatedServer())
+    {
+        serverData.players.push_back({ TicTacToe::Case::Empty, netService->localAddress() });
+    }
+    auto isMyTurn = [&]() { assert(!netService->isDedicatedServer()); return game.currentPlayer() == localPlayerSymbol; };
     auto setState = [&](State newState)
     {
+        auto updatePlayingState = [&]()
+        {
+            if (netService->isNetworked())
+            {
+                if (netService->isDedicatedServer())
+                {
+                    if (game.currentPlayer() == TicTacToe::Case::X)
+                    {
+                        updateWindowTitle("Player X turn");
+                    }
+                    else
+                    {
+                        updateWindowTitle("Player O turn");
+                    }
+                }
+                else if (isMyTurn())
+                {
+                    if (localPlayerSymbol == TicTacToe::Case::X)
+                        updateWindowTitle("Your turn (X)");
+                    else
+                        updateWindowTitle("Your turn (O)");
+                }
+                else
+                {
+                    updateWindowTitle("Opponent turn");
+                }
+            }
+            else if (game.currentPlayer() == TicTacToe::Case::X)
+            {
+                updateWindowTitle("Player X turn");
+            }
+            else
+            {
+                updateWindowTitle("Player O turn");
+            }
+        };
+        auto updateStateFinished = [&]()
+        {
+            const TicTacToe::Case winner = game.grid().winner();
+            if (winner == TicTacToe::Case::Empty)
+                updateWindowTitle("Draw");
+            else
+            {
+                if (!netService->isNetworked() || netService->isDedicatedServer())
+                {
+                    updateWindowTitle((winner == TicTacToe::Case::X) ? "X win" : "O win");
+                }
+                else
+                {
+                    updateWindowTitle((winner == localPlayerSymbol) ? "You win" : "You loose");
+                }
+            }
+        };
         state = newState;
         switch (state)
         {
             case State::WaitingOpponent: updateWindowTitle("Waiting opponent"); break;
             case State::WaitingConnection: updateWindowTitle("Waiting connection"); break;
-            case State::MyTurn: updateWindowTitle(netService->isNetworked() ? "My turn" : "Player 1 turn"); break;
-            case State::OpponentTurn: updateWindowTitle(netService->isNetworked() ? "Opponent turn" : "Player 2 turn"); break;
-            case State::Finished: updateWindowTitle("Finished"); break;
+            case State::WaitingGameStart: updateWindowTitle("Waiting game start"); break;
+            case State::Playing: updatePlayingState(); break;
+            case State::PlayRequested: updateWindowTitle("Waiting for server validation"); break;
+            case State::Finished: updateStateFinished(); break;
         }
     };
     if (netService->isNetworked())
         setState(netService->isHost() ? State::WaitingOpponent : State::WaitingConnection);
     else
-        setState(State::MyTurn);
+        setState(State::Playing);
 
     // Load textures to display : None, X & O
-    std::array<SDL_Texture*, 3> plays{ LoadTexture("Empty.bmp", renderer), LoadTexture("X.bmp", renderer), LoadTexture("O.bmp", renderer) };
+    const std::array<SDL_Texture*, 3> plays{ LoadTexture("Empty.bmp", renderer), LoadTexture("X.bmp", renderer), LoadTexture("O.bmp", renderer) };
 
-    TicTacToe::Grid game;
-    // Host plays X, guest plays O, host plays first
-    const std::array<TicTacToe::Case, 2> players{ TicTacToe::Case::X, TicTacToe::Case::O };
-    uint8_t currentPlayingPlayer = 0;
+    // This is only to play the validated play locally
     auto playCurrentTurnLocally = [&](unsigned int x, unsigned int y)
     {
-        const TicTacToe::Case currentPlayerSymbol = players[currentPlayingPlayer];
-        if (game.play(x, y, currentPlayerSymbol))
-        {
-            // If the move is successful, change current player to next one
-            currentPlayingPlayer = (currentPlayingPlayer + 1) % 2;
-            setState(state == State::OpponentTurn ? State::MyTurn : State::OpponentTurn);
-            return true;
-        }
-        return false;
+        return game.play(x, y);
     };
-
-    Bousk::Network::Address opponent;
+    auto requestPlay = [&](unsigned int x, unsigned int y)
+    {
+        TicTacToe::Net::PlayRequest msg;
+        msg.x = x;
+        msg.y = y;
+        Bousk::Serialization::Serializer serializer;
+        if (!msg.write(serializer))
+        {
+            std::cout << "Critical error : failed to serialize play packet" << std::endl;
+            assert(false);
+        }
+        netService->sendToHost(serializer.buffer(), serializer.bufferSize());
+        setState(State::PlayRequested);
+    };
 
     NetListener netListener;
     netService->addListener(&netListener);
     netListener.mOnIncomingConnection = [&](const Bousk::Network::Messages::IncomingConnection& msg)
     {
-        if (netService->isHost() && state == State::WaitingOpponent)
-        {
-            setState(State::WaitingConnection);
-            return true;
-        }
-        return false;
+        return (netService->isHost() && serverData.players.size() < 2);
     };
     netListener.mOnConnectionResult = [&](const Bousk::Network::Messages::Connection& msg)
     {
-        if (state == State::WaitingConnection)
+        if (netService->isHost() && msg.result == Bousk::Network::Messages::Connection::Result::Success)
         {
-            if (msg.result == Bousk::Network::Messages::Connection::Result::Success)
+            serverData.players.push_back({ TicTacToe::Case::Empty, msg.emitter() });
+
+            // Enough player to start a game
+            if (serverData.players.size() == 2)
             {
-                // Save opponent address
-                opponent = msg.emitter();
-                // Host plays first
-                setState(netService->isHost() ? State::MyTurn : State::OpponentTurn);
+                setState(State::WaitingGameStart);
+                std::array<TicTacToe::Case, 2> playerSymbols{ TicTacToe::Case::X, TicTacToe::Case::O };
+                {
+                    std::random_device rd;
+                    std::mt19937 g(rd());
+                    std::shuffle(playerSymbols.begin(), playerSymbols.end(), g);
+                }
+                // Assign random sign to each player
+                for (size_t i = 0; i < 2; ++i)
+                {
+                    serverData.players[i].symbol = playerSymbols[i];
+
+                    TicTacToe::Net::Setup msgSetup;
+                    msgSetup.symbol = serverData.players[i].symbol;
+                    Bousk::Serialization::Serializer serializer;
+                    msgSetup.write(serializer);
+                    netService->sendTo(serverData.players[i].address, serializer.buffer(), serializer.bufferSize());
+                }
+                // Send start game message
+                {
+                    TicTacToe::Net::Start msgStart;
+                    msgStart.symbol = playerSymbols[0];
+                    Bousk::Serialization::Serializer serializer;
+                    msgStart.write(serializer);
+                    netService->sendAll(serializer.buffer(), serializer.bufferSize());
+                }
             }
-            else if (netService->isHost())
-            {
-                // Go back to waiting an opponent
-                setState(State::WaitingOpponent);
-            }
+        }
+        else if (msg.result == Bousk::Network::Messages::Connection::Result::Success)
+        {
+            setState(State::WaitingGameStart);
+        }
+        else
+        {
+            std::cout << "Critical error : connection & status failure" << std::endl;
+            assert(false);
         }
     };
-    netListener.mOnDataReceived = [&](const Bousk::Network::Messages::UserData& msg)
+    netListener.mOnMessageReceived = [&](const TicTacToe::Net::Message& msg)
     {
-        Bousk::Serialization::Deserializer deserializer(msg.data.data(), msg.data.size());
-        TicTacToe::Net::Play play;
-        if (!play.read(deserializer))
+        switch (msg.type())
         {
-            std::cout << "Critical error : failed to deserialize play packet" << std::endl;
-            assert(false);
-        }
-        assert(state == State::OpponentTurn);
-        if (!playCurrentTurnLocally(play.x, play.y))
-        {
-            std::cout << "Critical error : failed to play move" << std::endl;
-            assert(false);
+            case TicTacToe::Net::Message::Type::Setup:
+            {
+                assert(state == State::WaitingGameStart);
+                const TicTacToe::Net::Setup& setupMsg = static_cast<const TicTacToe::Net::Setup&>(msg);
+                localPlayerSymbol = setupMsg.symbol;
+            } break;
+            case TicTacToe::Net::Message::Type::Start:
+            {
+                assert(state == State::WaitingGameStart);
+                const TicTacToe::Net::Start& startMsg = static_cast<const TicTacToe::Net::Start&>(msg);
+                game.start(startMsg.symbol);
+                setState(State::Playing);
+            } break;
+            case TicTacToe::Net::Message::Type::PlayRequest:
+            {
+                assert(!netService->isNetworked() || netService->isHost());
+                const TicTacToe::Net::PlayRequest& request = static_cast<const TicTacToe::Net::PlayRequest&>(msg);
+
+                TicTacToe::Net::PlayResult result;
+                result.valid = game.grid().canPlay(request.x, request.y, game.currentPlayer());
+                result.x = request.x;
+                result.y = request.y;
+                Bousk::Serialization::Serializer serializer;
+                result.write(serializer);
+                
+                if (!result.valid)
+                {
+                    // Play is invalid, send back error to player
+                    // TODO
+                }
+                else
+                {
+                    // Play is valid, broadcast result to everyone
+                    netService->sendAll(serializer.buffer(), serializer.bufferSize());
+                }
+            } break;
+            case TicTacToe::Net::Message::Type::PlayResult:
+            {
+                const TicTacToe::Net::PlayResult& result = static_cast<const TicTacToe::Net::PlayResult&>(msg);
+                if (result.valid)
+                {
+                    if (!playCurrentTurnLocally(result.x, result.y))
+                    {
+                        std::cout << "Critical error : failed to play move" << std::endl;
+                        assert(false);
+                    }
+
+                    setState(State::Playing);
+                    if (game.grid().isFinished())
+                    {
+                        setState(State::Finished);
+                    }
+                }
+                else
+                {
+                    assert(state == State::PlayRequested);
+                }
+            } break;
+            default:
+                assert(false);
         }
     };
     netListener.mOnDisconnection = [&](const Bousk::Network::Messages::Disconnection& msg)
@@ -194,7 +347,7 @@ int main_merged(const bool isNetworked, const bool isHost = false)
             {
                 break;
             }
-            if (e.type == SDL_MOUSEBUTTONUP && (state == State::MyTurn || !netService->isNetworked()))
+            if (e.type == SDL_MOUSEBUTTONUP && (state == State::Playing && (isMyTurn() || !netService->isNetworked())))
             {
                 if (e.button.button == SDL_BUTTON_LEFT)
                 {
@@ -204,22 +357,7 @@ int main_merged(const bool isNetworked, const bool isHost = false)
                         // Click released on the window : play ?
                         const unsigned int caseX = static_cast<unsigned int>(e.button.x / CASE_W);
                         const unsigned int caseY = static_cast<unsigned int>(e.button.y / CASE_H);
-                        if (playCurrentTurnLocally(caseX, caseY))
-                        {
-                            if (netService->isNetworked())
-                            {
-                                TicTacToe::Net::Play msg;
-                                msg.x = caseX;
-                                msg.y = caseY;
-                                Bousk::Serialization::Serializer serializer;
-                                if (!msg.write(serializer))
-                                {
-                                    std::cout << "Critical error : failed to serialize play packet" << std::endl;
-                                    assert(false);
-                                }
-                                netService->sendTo(opponent, serializer.buffer(), serializer.bufferSize());
-                            }
-                        }
+                        requestPlay(caseX, caseY);
                     }
                 }
             }
@@ -238,7 +376,7 @@ int main_merged(const bool isNetworked, const bool isHost = false)
         {
             for (int y = 0; y < 3; ++y)
             {
-                const TicTacToe::Case caseStatus = game.grid()[x][y];
+                const TicTacToe::Case caseStatus = game.grid().grid()[x][y];
                 const SDL_Rect position{ x * CASE_W, y * CASE_H, CASE_W, CASE_H };
                 SDL_RenderCopy(renderer, plays[static_cast<unsigned int>(caseStatus)], NULL, &position);
             }
@@ -251,24 +389,6 @@ int main_merged(const bool isNetworked, const bool isHost = false)
         // Vertical
         SDL_RenderDrawLine(renderer, CASE_W, 0, CASE_W, WIN_H);
         SDL_RenderDrawLine(renderer, CASE_W * 2, 0, CASE_W * 2, WIN_H);
-
-        if (game.isFinished())
-        {
-            const TicTacToe::Case winner = game.winner();
-            if (winner != players[0] && winner != players[1])
-                updateWindowTitle("Draw");
-            else
-            {
-                if (netService->isNetworked())
-                {
-                    updateWindowTitle((winner == players[0]) == netService->isHost() ? "You win" : "You loose");
-                }
-                else
-                {
-                    updateWindowTitle(winner == players[0] ? "Player 1 wins" : "Player 2 wins");
-                }
-            }
-        }
 
         SDL_RenderPresent(renderer);
         SDL_Delay(1);

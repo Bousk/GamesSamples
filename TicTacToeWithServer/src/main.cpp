@@ -1,46 +1,37 @@
 #include <main.hpp>
 
+#include <NetService.hpp>
+
 #include <string>
 
-extern int main_p2p(bool isHost);
-extern int main_merged(bool isNetworked, bool isHost);
-extern int main_solo();
+extern int main_game(NetService::NetworkType);
 
-enum class MainType
-{
-    Unknown,
-    Solo,
-    P2P_Host,
-    P2P_Client,
-};
 int SDL_main(int argc, char* argv[])
 {
-    MainType type = MainType::Unknown;
+    NetService::NetworkType networkType = NetService::NetworkType::None;
     for (int i = 0; i < argc; ++i)
     {
         const std::string arg(argv[i]);
         if (arg == "-solo")
         {
-            type = MainType::Solo;
+            networkType = NetService::NetworkType::None;
             break;
         }
-        else if (arg == "-p2p:host")
+        else if (arg == "-client")
         {
-            type = MainType::P2P_Host;
+            networkType = NetService::NetworkType::Client;
             break;
         }
-        else if (arg == "-p2p:client")
+        else if (arg == "-host")
         {
-            type = MainType::P2P_Client;
+            networkType = NetService::NetworkType::Host;
+            break;
+        }
+        else if (arg == "-server")
+        {
+            networkType = NetService::NetworkType::DedicatedServer;
             break;
         }
     }
-    return main_merged(type != MainType::Unknown && type != MainType::Solo, type == MainType::P2P_Host);
-    //switch (type)
-    //{
-    //    case MainType::Solo: return main_solo();
-    //    case MainType::P2P_Host: return main_p2p(true);
-    //    case MainType::P2P_Client: return main_p2p(false);
-    //    case MainType::Unknown: return -1;
-    //}
+    return main_game(networkType);
 }

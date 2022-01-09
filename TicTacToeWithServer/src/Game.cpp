@@ -1,12 +1,29 @@
 #include <Game.hpp>
+#include <cassert>
 
 namespace TicTacToe
 {
-	bool Grid::play(unsigned int x, unsigned int y, Case player)
+	void Grid::reset()
 	{
+		for (auto& line : mGrid)
+			line.fill(Case::Empty);
+		mWinner = Case::Empty;
+		mFinished = false;
+	}
+	bool Grid::canPlay(unsigned int x, unsigned int y, Case player) const
+	{
+		if (player == Case::Empty)
+			return false;
 		if (x > 2 || y > 2)
 			return false;
 		if (mGrid[x][y] != Case::Empty)
+			return false;
+
+		return true;
+	}
+	bool Grid::play(unsigned int x, unsigned int y, Case player)
+	{
+		if (!canPlay(x, y, player))
 			return false;
 
 		mGrid[x][y] = player;
@@ -48,5 +65,25 @@ namespace TicTacToe
 			}
 		}
 		return true;
+	}
+
+	void Game::start(Case firstPlayer)
+	{
+		assert(!isStarted());
+		mCurrentPlayer = firstPlayer;
+	}
+	bool Game::play(unsigned int x, unsigned int y)
+	{
+		if (mGrid.play(x, y, currentPlayer()))
+		{
+			mCurrentPlayer = mCurrentPlayer == Case::X ? Case::O : Case::X;
+			return true;
+		}
+		return false;
+	}
+	void Game::reset()
+	{
+		mGrid.reset();
+		mCurrentPlayer = Case::Empty;
 	}
 }

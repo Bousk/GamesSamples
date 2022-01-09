@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Game.hpp>
-#include <Net.hpp>
 
 #include <SDL.h>
 
